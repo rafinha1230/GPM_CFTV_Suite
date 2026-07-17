@@ -1,0 +1,2 @@
+PySide6==6.6.0
+python-gstreamer==1.22.0

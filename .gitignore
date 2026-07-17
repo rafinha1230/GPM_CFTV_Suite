@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Ambiente Virtual
+venv/
+env/
+.env
+
+# IDE
+.vscode/settings.json
+*.swp
+*.swo
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Sensível
+*.key
+*.pem
