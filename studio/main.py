@@ -400,17 +400,71 @@ class MainWindow(QMainWindow):
     def on_generate_viewer(self):
         """Gera o pacote do Viewer."""
         cameras = self.camera_manager.get_all()
+        
         if not cameras:
-            QMessageBox.warning(self, "Aviso", "Nenhuma câmera cadastrada para gerar o Viewer!")
+            QMessageBox.warning(self, "Aviso", "Nenhuma câmera cadastrada!")
             return
         
-        QMessageBox.information(
+        # Perguntar onde salvar
+        from PySide6.QtWidgets import QFileDialog
+        
+        output_dir = QFileDialog.getExistingDirectory(
             self,
-            "🚀 Gerar Viewer",
-            f"Funcionalidade em desenvolvimento!\n\n"
-            f"Câmeras configuradas: {len(cameras)}\n"
-            f"O Viewer será gerado como AppImage para Linux."
+            "Selecionar Pasta de Destino",
+            str(Path.home() / "Desktop"),
+            QFileDialog.ShowDirsOnly
         )
+        
+        if not output_dir:
+            return
+        
+        # Confirmar
+        reply = QMessageBox.question(
+            self,
+            "Gerar Viewer",
+            f"Configurações do Viewer:\n\n"
+            f"📷 Câmeras: {len(cameras)}\n"
+            f"📁 Destino: {output_dir}\n\n"
+            f"Deseja continuar?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
+        # Gerar
+        try:
+            from studio.core.viewer_generator import ViewerGenerator
+            
+            self.status_bar.showMessage("🚀 Gerando Viewer...")
+            
+            generator = ViewerGenerator(cameras, output_dir)
+            package_path = generator.generate()
+            
+            QMessageBox.information(
+                self,
+                "✅ Viewer Gerado!",
+                f"Viewer gerado com sucesso!\n\n"
+                f"📦 Arquivo: {package_path}\n\n"
+                f"📋 Instruções:\n"
+                f"1. Extraia o ZIP no computador Linux\n"
+                f"2. Execute: ./start_viewer.sh"
+            )
+            
+            self.status_bar.showMessage(f"✅ Viewer gerado: {package_path}")
+            
+            # Abrir pasta no explorador
+            import subprocess
+            subprocess.Popen(['explorer', output_dir])
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Erro",
+                f"Erro ao gerar Viewer:\n\n{str(e)}"
+            )
+            self.status_bar.showMessage("❌ Erro ao gerar Viewer")
     
     def closeEvent(self, event):
         """Confirmação ao fechar."""
