@@ -39,14 +39,14 @@ class ViewerGenerator:
         Returns:
             Caminho do arquivo gerado.
         """
-        print("🚀 Iniciando geração do Viewer...")
-        print(f"📷 Câmeras configuradas: {len(self.cameras)}")
+        print(">>> Iniciando geracao do Viewer...")
+        print(f"    Cameras configuradas: {len(self.cameras)}")
         
         # 1. Criar diretórios
         self._create_directories()
         
         # 2. Gerar cameras.json
-        config_path = self._generate_config()
+        self._generate_config()
         
         # 3. Copiar arquivos do Viewer
         self._copy_viewer_files()
@@ -60,8 +60,8 @@ class ViewerGenerator:
         # 6. Empacotar
         package_path = self._create_package()
         
-        print(f"✅ Viewer gerado com sucesso!")
-        print(f"📦 Arquivo: {package_path}")
+        print(f">>> Viewer gerado com sucesso!")
+        print(f"    Arquivo: {package_path}")
         
         return str(package_path)
     
@@ -77,7 +77,7 @@ class ViewerGenerator:
         (self.build_dir / "viewer").mkdir()
         (self.build_dir / "config").mkdir()
         
-        print(f"📁 Diretórios criados: {self.build_dir}")
+        print(f"    Diretorios criados: {self.build_dir}")
     
     def _generate_config(self) -> Path:
         """
@@ -124,7 +124,7 @@ class ViewerGenerator:
         with open(root_config, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
         
-        print(f"📄 Configuração gerada: {config_path}")
+        print(f"    Configuracao gerada: {config_path}")
         
         return config_path
     
@@ -145,9 +145,9 @@ class ViewerGenerator:
                 dest_file.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(py_file, dest_file)
             
-            print(f"📋 Arquivos do Viewer copiados")
+            print("    Arquivos do Viewer copiados")
         else:
-            print("⚠️ Pasta viewer/ não encontrada - usando modo standalone")
+            print("    [AVISO] Pasta viewer/ nao encontrada - usando modo standalone")
             self._create_standalone_viewer()
     
     def _create_standalone_viewer(self):
@@ -168,17 +168,17 @@ class ViewerGenerator:
         viewer_code += '    config = load_config()\n'
         viewer_code += '    print("=" * 50)\n'
         viewer_code += '    print("GPM CFTV Viewer")\n'
-        viewer_code += '    print(f"Cameras: {len(config.get(\"cameras\", []))}")\n'
+        viewer_code += '    print("Cameras: " + str(len(config.get("cameras", []))))\n'
         viewer_code += '    print("=" * 50)\n'
         viewer_code += '    for cam in config.get("cameras", []):\n'
-        viewer_code += '        print(f"  {cam[\"ip\"]}:{cam[\"port\"]} - {cam[\"rtsp_path\"]}")\n'
+        viewer_code += '        print("  " + cam["ip"] + ":" + str(cam["port"]) + " - " + cam["rtsp_path"])\n'
         
         viewer_file = self.build_dir / "viewer" / "main.py"
         viewer_file.parent.mkdir(parents=True, exist_ok=True)
         with open(viewer_file, 'w') as f:
             f.write(viewer_code)
         
-        print("📝 Viewer standalone criado")
+        print("    Viewer standalone criado")
     
     def _create_launcher(self):
         """
@@ -188,25 +188,25 @@ class ViewerGenerator:
         launcher_linux = '#!/bin/bash\n'
         launcher_linux += '# GPM CFTV Viewer - Script de Inicializacao\n'
         launcher_linux += '# Gerado pelo GPM CFTV Studio\n\n'
-        launcher_linux += 'echo "🎥 Iniciando GPM CFTV Viewer..."\n'
+        launcher_linux += 'echo "Iniciando GPM CFTV Viewer..."\n'
         launcher_linux += 'echo "=================================="\n\n'
         launcher_linux += '# Verificar Python\n'
         launcher_linux += 'if ! command -v python3 &> /dev/null; then\n'
-        launcher_linux += '    echo "❌ Python 3 nao encontrado!"\n'
+        launcher_linux += '    echo "[ERRO] Python 3 nao encontrado!"\n'
         launcher_linux += '    echo "   Instale: sudo apt install python3 python3-pip"\n'
         launcher_linux += '    exit 1\n'
         launcher_linux += 'fi\n\n'
         launcher_linux += '# Verificar dependencias\n'
-        launcher_linux += 'echo "📦 Verificando dependencias..."\n'
+        launcher_linux += 'echo "Verificando dependencias..."\n'
         launcher_linux += 'python3 -c "from PySide6.QtWidgets import QApplication" 2>/dev/null\n'
         launcher_linux += 'if [ $? -ne 0 ]; then\n'
-        launcher_linux += '    echo "⚠️ PySide6 nao encontrado. Instalando..."\n'
+        launcher_linux += '    echo "[AVISO] PySide6 nao encontrado. Instalando..."\n'
         launcher_linux += '    pip3 install PySide6\n'
         launcher_linux += 'fi\n\n'
         launcher_linux += '# Executar Viewer\n'
         launcher_linux += 'cd "$(dirname "$0")"\n'
         launcher_linux += 'python3 viewer/main.py\n\n'
-        launcher_linux += 'echo "👋 Viewer encerrado."\n'
+        launcher_linux += 'echo "Viewer encerrado."\n'
         
         launcher_path = self.build_dir / "start_viewer.sh"
         with open(launcher_path, 'w') as f:
@@ -215,7 +215,7 @@ class ViewerGenerator:
         
         # Script Windows
         bat_launcher = '@echo off\n'
-        bat_launcher += 'echo 🎥 Iniciando GPM CFTV Viewer...\n'
+        bat_launcher += 'echo Iniciando GPM CFTV Viewer...\n'
         bat_launcher += 'echo ==================================\n'
         bat_launcher += 'python viewer/main.py\n'
         bat_launcher += 'pause\n'
@@ -224,7 +224,7 @@ class ViewerGenerator:
         with open(bat_path, 'w') as f:
             f.write(bat_launcher)
         
-        print("🚀 Scripts de inicialização criados")
+        print("    Scripts de inicializacao criados")
     
     def _create_readme(self):
         """
@@ -238,13 +238,13 @@ class ViewerGenerator:
         readme += "Sistema de Monitoramento CFTV - Armazem Paraiba\n"
         readme += "=" * 60 + "\n\n"
         
-        readme += "📦 INFORMACOES DO PACOTE\n"
+        readme += "INFORMACOES DO PACOTE\n"
         readme += "-" * 30 + "\n"
         readme += f"Gerado em: {generated_date}\n"
         readme += f"Gerado por: GPM CFTV Studio v1.0.0\n"
         readme += f"Cameras configuradas: {num_cameras}\n\n"
         
-        readme += "🚀 COMO EXECUTAR\n"
+        readme += "COMO EXECUTAR\n"
         readme += "-" * 30 + "\n"
         readme += "Linux (Zorin OS):\n"
         readme += "  chmod +x start_viewer.sh\n"
@@ -254,19 +254,19 @@ class ViewerGenerator:
         readme += "Manual:\n"
         readme += "  python3 viewer/main.py\n\n"
         
-        readme += "📷 CAMERAS CONFIGURADAS\n"
+        readme += "CAMERAS CONFIGURADAS\n"
         readme += "-" * 30 + "\n"
         for cam in self.cameras:
             readme += f"  {cam.id} | {cam.ip}:{cam.port} | {cam.rtsp_path}\n"
         
-        readme += "\n⌨️ ATALHOS\n"
+        readme += "\nATALHOS\n"
         readme += "-" * 30 + "\n"
         readme += "  F11         - Tela cheia\n"
         readme += "  ESC         - Voltar ao grid\n"
         readme += "  Duplo clique - Ampliar camera\n"
         readme += "  Ctrl+Q      - Sair\n\n"
         
-        readme += "🛠️ SUPORTE\n"
+        readme += "SUPORTE\n"
         readme += "-" * 30 + "\n"
         readme += "GPM Manutencao - Armazem Paraiba\n"
         
@@ -274,7 +274,7 @@ class ViewerGenerator:
         with open(readme_path, 'w', encoding='utf-8') as f:
             f.write(readme)
         
-        print("📖 README criado")
+        print("    README criado")
     
     def _create_package(self) -> Path:
         """
@@ -294,7 +294,7 @@ class ViewerGenerator:
                     arcname = file_path.relative_to(self.build_dir)
                     zf.write(file_path, arcname)
         
-        print(f"📦 Pacote criado: {zip_path}")
-        print(f"📏 Tamanho: {zip_path.stat().st_size / 1024:.1f} KB")
+        print(f"    Pacote criado: {zip_path}")
+        print(f"    Tamanho: {zip_path.stat().st_size / 1024:.1f} KB")
         
         return zip_path
