@@ -1,6 +1,6 @@
 # 🎥 GPM CFTV Suite
 
-**Sistema de Monitoramento CFTV - Armazém Paraíba**
+**Sistema de Monitoramento CFTV**
 
 ---
 
@@ -51,6 +51,6 @@ Suite profissional para gerenciamento e visualização de câmeras IP.
 
 ## 👨‍💻 Desenvolvedor
 
-**Gabriel** - Equipe GPM Manutenção
+**Rafael** - Equipe GPM Manutenção
 
 ---
