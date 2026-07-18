@@ -16,13 +16,33 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox,
     QVBoxLayout, QHBoxLayout, QWidget, QLabel,
     QPushButton, QFrame, QStatusBar, QListWidget,
-    QListWidgetItem, QAbstractItemView
+    QListWidgetItem, QAbstractItemView, QProgressDialog
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QThread, Signal
 from PySide6.QtGui import QFont, QIcon
 
 from studio.core.camera_manager import CameraManager
+from studio.core.rtsp_tester import RTSPTester
 from studio.ui.camera_form import CameraFormDialog
+
+
+class TestWorker(QThread):
+    """Thread para testar câmeras sem travar a interface."""
+    progress = Signal(int)
+    result = Signal(str, bool, str)  # camera_id, status, mensagem
+    finished_all = Signal()
+    
+    def __init__(self, cameras):
+        super().__init__()
+        self.cameras = cameras
+    
+    def run(self):
+        total = len(self.cameras)
+        for i, camera in enumerate(self.cameras):
+            status, msg = RTSPTester.test_camera(camera)
+            self.result.emit(camera.id, status, msg)
+            self.progress.emit(int((i + 1) / total * 100))
+        self.finished_all.emit()
 
 
 class MainWindow(QMainWindow):
@@ -31,6 +51,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.camera_manager = CameraManager()
+        self.camera_status = {}  # Armazena status dos testes
         print(f"🔧 Inicializando GPM CFTV Studio...")
         print(f"📷 Câmeras carregadas: {self.camera_manager.count()}")
         self.setup_ui()
@@ -60,7 +81,7 @@ class MainWindow(QMainWindow):
         title.setFont(QFont("Segoe UI", 28, QFont.Bold))
         header_layout.addWidget(title)
         
-        subtitle = QLabel("Configuração de Câmeras IP - Armazém Paraíba")
+        subtitle = QLabel("Configuração de Câmeras IP - GPM")
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setFont(QFont("Segoe UI", 14))
         header_layout.addWidget(subtitle)
@@ -75,18 +96,23 @@ class MainWindow(QMainWindow):
         list_frame.setFrameStyle(QFrame.StyledPanel)
         list_layout = QVBoxLayout(list_frame)
         
+        list_header = QHBoxLayout()
         list_title = QLabel("📋 Câmeras Cadastradas")
         list_title.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        list_layout.addWidget(list_title)
+        list_header.addWidget(list_title)
+        
+        list_header.addStretch()
+        
+        self.lbl_count = QLabel("0 câmera(s)")
+        self.lbl_count.setStyleSheet("color: #a6adc8;")
+        list_header.addWidget(self.lbl_count)
+        
+        list_layout.addLayout(list_header)
         
         self.camera_list = QListWidget()
         self.camera_list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.camera_list.itemDoubleClicked.connect(self.on_edit_camera)
         list_layout.addWidget(self.camera_list)
-        
-        self.lbl_count = QLabel("Nenhuma câmera cadastrada")
-        self.lbl_count.setAlignment(Qt.AlignCenter)
-        list_layout.addWidget(self.lbl_count)
         
         content_layout.addWidget(list_frame, 2)
         
@@ -115,12 +141,33 @@ class MainWindow(QMainWindow):
         self.btn_remove.clicked.connect(self.on_remove_camera)
         actions_layout.addWidget(self.btn_remove)
         
+        # Separador
+        separator1 = QFrame()
+        separator1.setFrameShape(QFrame.HLine)
+        actions_layout.addWidget(separator1)
+        
+        # Botão Testar Todas
+        self.btn_test_all = QPushButton("🔍 Testar Todas as Conexões")
+        self.btn_test_all.setMinimumHeight(45)
+        self.btn_test_all.clicked.connect(self.on_test_all)
+        self.btn_test_all.setStyleSheet("""
+            QPushButton {
+                background-color: #f9e2af;
+                color: #1e1e2e;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #f5c2e7;
+            }
+        """)
+        actions_layout.addWidget(self.btn_test_all)
+        
         actions_layout.addStretch()
         
         # Separador
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        actions_layout.addWidget(separator)
+        separator2 = QFrame()
+        separator2.setFrameShape(QFrame.HLine)
+        actions_layout.addWidget(separator2)
         
         self.btn_generate = QPushButton("🚀 Gerar Viewer")
         self.btn_generate.setMinimumHeight(50)
@@ -203,6 +250,20 @@ class MainWindow(QMainWindow):
                 color: #a6adc8;
                 border-top: 2px solid #45475a;
             }
+            QProgressDialog {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+            }
+            QProgressBar {
+                background-color: #313244;
+                border: 2px solid #45475a;
+                border-radius: 5px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #89b4fa;
+                border-radius: 3px;
+            }
         """)
     
     def refresh_camera_list(self):
@@ -211,14 +272,21 @@ class MainWindow(QMainWindow):
         cameras = self.camera_manager.get_all()
         
         for camera in cameras:
-            status_icon = "🟢" if camera.enabled else "🔴"
-            item_text = f"{status_icon} {camera.ip}:{camera.port} - {camera.rtsp_path}"
+            # Verificar se tem status de teste
+            status = self.camera_status.get(camera.id)
+            
+            if status is not None:
+                icon = "🟢" if status else "🔴"
+            else:
+                icon = "⚪"  # Não testado
+            
+            item_text = f"{icon} {camera.ip}:{camera.port} - {camera.rtsp_path}"
             item = QListWidgetItem(item_text)
             item.setData(Qt.UserRole, camera.id)
             self.camera_list.addItem(item)
         
         count = self.camera_manager.count()
-        self.lbl_count.setText(f"{count} câmera(s) cadastrada(s)")
+        self.lbl_count.setText(f"{count} câmera(s)")
         self.status_bar.showMessage(f"✅ Pronto | {count} câmera(s)")
     
     def on_add_camera(self):
@@ -245,6 +313,8 @@ class MainWindow(QMainWindow):
             if dialog.exec():
                 updated_camera = dialog.get_camera_data()
                 if self.camera_manager.update(camera_id, updated_camera):
+                    # Remove status antigo
+                    self.camera_status.pop(camera_id, None)
                     self.refresh_camera_list()
                     self.status_bar.showMessage("✅ Câmera atualizada com sucesso!")
     
@@ -270,21 +340,75 @@ class MainWindow(QMainWindow):
         
         if reply == QMessageBox.Yes:
             self.camera_manager.remove(camera_id)
+            self.camera_status.pop(camera_id, None)
             self.refresh_camera_list()
             self.status_bar.showMessage("🗑️ Câmera removida")
     
+    def on_test_all(self):
+        """Testa conexão de todas as câmeras."""
+        cameras = self.camera_manager.get_all()
+        
+        if not cameras:
+            QMessageBox.warning(self, "Aviso", "Nenhuma câmera cadastrada para testar!")
+            return
+        
+        # Criar barra de progresso
+        progress = QProgressDialog("Testando conexões...", "Cancelar", 0, 100, self)
+        progress.setWindowTitle("🔍 Testando Câmeras")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        
+        # Criar worker thread
+        self.test_worker = TestWorker(cameras)
+        self.test_worker.progress.connect(progress.setValue)
+        self.test_worker.result.connect(self.on_test_result)
+        self.test_worker.finished_all.connect(lambda: self.on_test_finished(progress))
+        self.test_worker.start()
+        
+        # Conectar cancelar
+        progress.canceled.connect(self.test_worker.terminate)
+    
+    def on_test_result(self, camera_id, status, message):
+        """Recebe resultado de teste individual."""
+        self.camera_status[camera_id] = status
+        
+        # Atualizar item na lista
+        for i in range(self.camera_list.count()):
+            item = self.camera_list.item(i)
+            if item.data(Qt.UserRole) == camera_id:
+                icon = "🟢" if status else "🔴"
+                camera = self.camera_manager.get(camera_id)
+                if camera:
+                    item.setText(f"{icon} {camera.ip}:{camera.port} - {camera.rtsp_path}")
+                break
+        
+        self.status_bar.showMessage(f"🔍 {message}")
+    
+    def on_test_finished(self, progress):
+        """Finaliza testes."""
+        progress.close()
+        
+        online = sum(1 for s in self.camera_status.values() if s)
+        offline = sum(1 for s in self.camera_status.values() if not s)
+        untested = self.camera_manager.count() - online - offline
+        
+        self.status_bar.showMessage(
+            f"✅ Teste concluído | 🟢 {online} online | 🔴 {offline} offline | ⚪ {untested} não testados"
+        )
+    
     def on_generate_viewer(self):
         """Gera o pacote do Viewer."""
-        enabled = self.camera_manager.get_enabled()
-        if not enabled:
-            QMessageBox.warning(self, "Aviso", "Nenhuma câmera ativa para gerar o Viewer!")
+        cameras = self.camera_manager.get_all()
+        if not cameras:
+            QMessageBox.warning(self, "Aviso", "Nenhuma câmera cadastrada para gerar o Viewer!")
             return
         
         QMessageBox.information(
             self,
             "🚀 Gerar Viewer",
             f"Funcionalidade em desenvolvimento!\n\n"
-            f"Câmeras ativas: {len(enabled)}\n"
+            f"Câmeras configuradas: {len(cameras)}\n"
             f"O Viewer será gerado como AppImage para Linux."
         )
     
