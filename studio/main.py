@@ -405,6 +405,22 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Aviso", "Nenhuma câmera cadastrada!")
             return
         
+        # Perguntar qual tipo de pacote
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Gerar Viewer")
+        msg.setText("Escolha o tipo de pacote:")
+        msg.setIcon(QMessageBox.Question)
+        
+        btn_zip = msg.addButton("📦 ZIP (Desenvolvimento)", QMessageBox.ActionRole)
+        btn_appimage = msg.addButton("🚀 AppImage (Usuário Final)", QMessageBox.ActionRole)
+        btn_cancel = msg.addButton("Cancelar", QMessageBox.RejectRole)
+        
+        msg.exec()
+        clicked = msg.clickedButton()
+        
+        if clicked == btn_cancel:
+            return
+        
         # Perguntar onde salvar
         from PySide6.QtWidgets import QFileDialog
         
@@ -418,53 +434,58 @@ class MainWindow(QMainWindow):
         if not output_dir:
             return
         
-        # Confirmar
-        reply = QMessageBox.question(
-            self,
-            "Gerar Viewer",
-            f"Configurações do Viewer:\n\n"
-            f"📷 Câmeras: {len(cameras)}\n"
-            f"📁 Destino: {output_dir}\n\n"
-            f"Deseja continuar?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes
-        )
-        
-        if reply != QMessageBox.Yes:
-            return
-        
-        # Gerar
         try:
-            from studio.core.viewer_generator import ViewerGenerator
+            if clicked == btn_zip:
+                # Gerar ZIP (desenvolvimento)
+                from studio.core.viewer_generator import ViewerGenerator
+                
+                self.status_bar.showMessage("Gerando Viewer (ZIP)...")
+                generator = ViewerGenerator(cameras, output_dir)
+                package_path = generator.generate()
+                
+                QMessageBox.information(
+                    self,
+                    "Viewer Gerado!",
+                    f"Pacote ZIP gerado com sucesso!\n\n"
+                    f"Arquivo: {package_path}\n\n"
+                    f"Para testar:\n"
+                    f"1. Extraia o ZIP\n"
+                    f"2. Execute: python viewer/main.py"
+                )
+                
+            elif clicked == btn_appimage:
+                # Gerar AppImage (usuário final)
+                from studio.core.appimage_builder import AppImageBuilder, export_build_zip
+                
+                self.status_bar.showMessage("Gerando AppImage...")
+                builder = AppImageBuilder(cameras, output_dir)
+                build_dir = builder.generate()
+                
+                # Exportar como ZIP para transporte
+                zip_path = export_build_zip(build_dir)
+                
+                QMessageBox.information(
+                    self,
+                    "AppImage Build Gerado!",
+                    f"Build do AppImage gerado com sucesso!\n\n"
+                    f"Arquivo ZIP: {zip_path}\n\n"
+                    f"Proximos passos (NO LINUX):\n"
+                    f"1. Extraia o ZIP no computador Linux\n"
+                    f"2. Execute: chmod +x build_appimage.sh\n"
+                    f"3. Execute: ./build_appimage.sh\n"
+                    f"4. O executavel estara no Desktop\n\n"
+                    f"O usuario final so da duplo clique!"
+                )
             
-            self.status_bar.showMessage("🚀 Gerando Viewer...")
+            self.status_bar.showMessage("Pacote gerado com sucesso!")
             
-            generator = ViewerGenerator(cameras, output_dir)
-            package_path = generator.generate()
-            
-            QMessageBox.information(
-                self,
-                "✅ Viewer Gerado!",
-                f"Viewer gerado com sucesso!\n\n"
-                f"📦 Arquivo: {package_path}\n\n"
-                f"📋 Instruções:\n"
-                f"1. Extraia o ZIP no computador Linux\n"
-                f"2. Execute: ./start_viewer.sh"
-            )
-            
-            self.status_bar.showMessage(f"✅ Viewer gerado: {package_path}")
-            
-            # Abrir pasta no explorador
+            # Abrir pasta
             import subprocess
             subprocess.Popen(['explorer', output_dir])
             
         except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Erro",
-                f"Erro ao gerar Viewer:\n\n{str(e)}"
-            )
-            self.status_bar.showMessage("❌ Erro ao gerar Viewer")
+            QMessageBox.critical(self, "Erro", f"Erro ao gerar Viewer:\n\n{str(e)}")
+            self.status_bar.showMessage("Erro ao gerar Viewer")
     
     def closeEvent(self, event):
         """Confirmação ao fechar."""
