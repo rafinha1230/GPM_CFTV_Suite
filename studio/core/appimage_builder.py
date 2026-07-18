@@ -8,7 +8,6 @@ import os
 import json
 import shutil
 import zipfile
-import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import List
@@ -17,8 +16,7 @@ from studio.models.camera import Camera
 
 class AppImageBuilder:
     """
-    Gera um AppImage pronto para uso no Linux.
-    Inclui instalador automático.
+    Gera o pacote completo do Viewer com instalador automático.
     """
     
     def __init__(self, cameras: List[Camera], output_dir: str = None):
@@ -30,9 +28,6 @@ class AppImageBuilder:
     def generate(self) -> str:
         """
         Gera o pacote completo com instalador.
-        
-        Returns:
-            Caminho do diretório de build.
         """
         print("=" * 60)
         print(">>> GERANDO PACOTE DE INSTALACAO")
@@ -40,25 +35,12 @@ class AppImageBuilder:
         print(f"    Cameras: {len(self.cameras)}")
         print(f"    Destino: {self.output_dir}")
         
-        # 1. Criar estrutura
         self._create_structure()
-        
-        # 2. Gerar configuração embutida
         self._generate_embedded_config()
-        
-        # 3. Criar Viewer standalone
         self._create_standalone_viewer()
-        
-        # 4. Criar script de build
         self._create_build_script()
-        
-        # 5. Criar instalador automático
         self._create_installer_script()
-        
-        # 6. Criar instruções
         self._create_instructions()
-        
-        # 7. Exportar ZIP
         zip_path = self._export_zip()
         
         print(f"\n{'='*60}")
@@ -68,11 +50,9 @@ class AppImageBuilder:
         print(f"")
         print(f"PROXIMOS PASSOS (no Linux):")
         print(f"1. Extraia o ZIP no computador Linux")
-        print(f"2. Execute: chmod +x build_appimage.sh")
-        print(f"3. Execute: ./build_appimage.sh")
-        print(f"4. Execute: ./instalar.sh")
-        print(f"")
-        print(f"O usuario so precisa do arquivo final!")
+        print(f"2. Execute: ./instalar.sh")
+        print(f"3. Digite a senha 1 vez")
+        print(f"4. Pronto! Icone na Area de Trabalho!")
         
         return str(self.build_dir)
     
@@ -83,14 +63,10 @@ class AppImageBuilder:
         
         self.build_dir.mkdir(parents=True)
         (self.build_dir / "src").mkdir()
-        
         print("    Estrutura criada")
     
     def _generate_embedded_config(self):
-        """
-        Gera configuração embutida no código Python.
-        Usa formato Python (True/False/None) em vez de JSON.
-        """
+        """Gera config no formato Python (True/False/None)."""
         config = {
             "version": "1.0.0",
             "viewer_settings": {
@@ -116,21 +92,17 @@ class AppImageBuilder:
         config_py = self.build_dir / "src" / "embedded_config.py"
         with open(config_py, 'w', encoding='utf-8') as f:
             f.write('"""Configuracao embutida das cameras."""\n')
-            f.write('# Formato Python (True/False/None)\n')
             f.write('EMBEDDED_CONFIG = ')
-            # Usar repr() para garantir formato Python
             f.write(repr(config))
         
         print(f"    Configuracao embutida: {len(self.cameras)} cameras")
     
     def _create_standalone_viewer(self):
-        """
-        Cria versao standalone do Viewer com config embutida.
-        """
+        """Cria Viewer standalone com config embutida."""
         viewer_code = '''#!/usr/bin/env python3
 """
 GPM CFTV Viewer - Versao Final
-Carrega cameras diretamente (sem arquivo externo)
+Empresa: Armazem Paraiba
 """
 import sys
 from pathlib import Path
@@ -270,33 +242,27 @@ if __name__ == "__main__":
         print("    Viewer standalone criado")
     
     def _create_build_script(self):
-        """
-        Cria script para gerar o executavel no Linux.
-        """
+        """Cria script de build para Linux."""
         script = '''#!/bin/bash
 # ==========================================
 # BUILD - GPM CFTV Viewer
-# Gera o executavel final
 # ==========================================
 
 echo "=================================="
 echo "GPM CFTV Viewer - Gerando executavel"
 echo "=================================="
 
-# Verificar Python
 if ! command -v python3 &> /dev/null; then
     echo "[ERRO] Python3 nao encontrado"
     echo "Instale: sudo apt install python3 python3-pip"
     exit 1
 fi
 
-# Instalar dependencias
 echo "[1/3] Instalando dependencias..."
 sudo apt update -qq
 sudo apt install -y -qq libxcb-cursor0 python3-pip
 pip3 install --quiet PySide6 pyinstaller
 
-# Gerar executavel
 echo "[2/3] Gerando executavel..."
 cd "$(dirname "$0")"
 python3 -m PyInstaller \\
@@ -308,7 +274,7 @@ python3 -m PyInstaller \\
     --collect-all PySide6 \\
     --clean \\
     --noconfirm \\
-    src/viewer_app.py
+    src/viewer_app.py 2>&1 | grep -E "(complete|ERRO)"
 
 if [ ! -f "dist/GPM_CFTV_Viewer" ]; then
     echo "[ERRO] Falha ao gerar executavel"
@@ -331,65 +297,135 @@ echo "Agora execute: ./instalar.sh"
     
     def _create_installer_script(self):
         """
-        Cria script instalador automatico.
+        Cria script instalador automatico que:
+        1. Gera o executavel se necessario
+        2. Instala em todos os usuarios
+        3. Funciona com Desktop ou Area de Trabalho
         """
         script = '''#!/bin/bash
 # ================================================
-# INSTALADOR - GPM CFTV Viewer
+# INSTALADOR COMPLETO - GPM CFTV Viewer
 # Armazem Paraiba - GPM Manutencao
+# Faz TUDO automaticamente!
 # ================================================
 
+clear
 echo ""
 echo "========================================="
-echo "  GPM CFTV Viewer - Instalador"
+echo "  GPM CFTV Viewer - Instalador Completo"
 echo "  Armazem Paraiba"
 echo "========================================="
 echo ""
 
-# Verificar se esta rodando como root
-if [ "$EUID" -ne 0 ]; then
-    echo "Precisamos de permissoes de administrador."
-    echo "Digite a senha do computador:"
-    echo ""
-    sudo "$0"
-    exit $?
+# Obter a pasta onde este script esta
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# ==========================================
+# ETAPA 1: Gerar executavel
+# ==========================================
+echo "[ETAPA 1/3] Gerando executavel..."
+
+if [ ! -f "dist/GPM_CFTV_Viewer" ]; then
+    echo "  Executavel nao encontrado. Gerando..."
+    
+    # Verificar Python
+    if ! command -v python3 &> /dev/null; then
+        echo "  Instalando Python..."
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq python3 python3-pip
+    fi
+    
+    # Instalar PyInstaller
+    echo "  Instalando PyInstaller..."
+    pip3 install --quiet pyinstaller PySide6 2>/dev/null
+    
+    # Corrigir formato do script se necessario
+    sed -i 's/\\r$//' build_appimage.sh 2>/dev/null
+    
+    # Gerar executavel
+    echo "  Compilando... (pode demorar 2-3 minutos)"
+    python3 -m PyInstaller \\
+        --onefile \\
+        --windowed \\
+        --name="GPM_CFTV_Viewer" \\
+        --add-data="src/embedded_config.py:src" \\
+        --hidden-import=PySide6 \\
+        --collect-all PySide6 \\
+        --clean \\
+        --noconfirm \\
+        src/viewer_app.py 2>&1 | grep -E "(INFO|ERROR|complete)"
+    
+    if [ ! -f "dist/GPM_CFTV_Viewer" ]; then
+        echo ""
+        echo "[ERRO] Falha ao gerar executavel!"
+        echo "Tente executar manualmente: ./build_appimage.sh"
+        exit 1
+    fi
+    
+    echo "  Executavel gerado com sucesso!"
+else
+    echo "  Executavel ja existe. Pulando geracao."
 fi
 
-echo "[1/3] Instalando dependencias do sistema..."
-apt-get update -qq
-apt-get install -y -qq libxcb-cursor0 python3 2>/dev/null
+# ==========================================
+# ETAPA 2: Instalar no sistema
+# ==========================================
+echo ""
+echo "[ETAPA 2/3] Instalando no sistema..."
 
-echo "[2/3] Instalando GPM CFTV Viewer..."
+# Pedir senha uma unica vez
+if [ "$EUID" -ne 0 ]; then
+    echo "  Precisamos de permissoes de administrador."
+    echo "  Digite a senha do computador:"
+    echo ""
+    exec sudo "$0"
+fi
+
+# Instalar biblioteca grafica
+echo "  Instalando dependencias..."
+apt-get update -qq 2>/dev/null
+apt-get install -y -qq libxcb-cursor0 2>/dev/null
+
+# Copiar para pasta do sistema
+echo "  Instalando programa..."
 mkdir -p /opt/gpm-cftv-viewer
-cp "$(dirname "$0")/dist/GPM_CFTV_Viewer" /opt/gpm-cftv-viewer/ 2>/dev/null
-chmod +x /opt/gpm-cftv-viewer/GPM_CFTV_Viewer 2>/dev/null
+cp "$SCRIPT_DIR/dist/GPM_CFTV_Viewer" /opt/gpm-cftv-viewer/
+chmod +x /opt/gpm-cftv-viewer/GPM_CFTV_Viewer
 
-# Copiar para Desktop de todos os usuarios
+# ==========================================
+# ETAPA 3: Criar atalhos
+# ==========================================
+echo ""
+echo "[ETAPA 3/3] Criando atalhos..."
+
+# Para cada usuario no sistema
 for user_home in /home/*; do
     if [ -d "$user_home" ]; then
         username=$(basename "$user_home")
         
-        # Desktop
-        desktop="$user_home/Desktop"
-        [ ! -d "$desktop" ] && desktop="$user_home/Área de Trabalho"
+        # Detectar pasta Desktop (portugues ou ingles)
+        desktop=""
+        [ -d "$user_home/Desktop" ] && desktop="$user_home/Desktop"
+        [ -d "$user_home/Área de Trabalho" ] && desktop="$user_home/Área de Trabalho"
+        [ -d "$user_home/Área de trabalho" ] && desktop="$user_home/Área de trabalho"
         
-        if [ -d "$desktop" ]; then
-            cp /opt/gpm-cftv-viewer/GPM_CFTV_Viewer "$desktop/" 2>/dev/null
-            chmod +x "$desktop/GPM_CFTV_Viewer" 2>/dev/null
+        if [ -n "$desktop" ]; then
+            cp /opt/gpm-cftv-viewer/GPM_CFTV_Viewer "$desktop/"
+            chmod +x "$desktop/GPM_CFTV_Viewer"
             chown "$username:$username" "$desktop/GPM_CFTV_Viewer" 2>/dev/null
-            echo "  Instalado para usuario: $username"
+            echo "  Icone criado em: $desktop"
         fi
     fi
 done
 
-# Criar atalho no menu
-echo "[3/3] Criando atalho no menu..."
+# Criar atalho no menu do sistema
 cat > /usr/share/applications/gpm-cftv-viewer.desktop << 'EOF'
 [Desktop Entry]
 Name=GPM CFTV Viewer
 Name[pt_BR]=GPM CFTV Viewer
 Comment=Sistema de Monitoramento CFTV
-Comment[pt_BR]=Sistema de Monitoramento CFTV
+Comment[pt_BR]=Sistema de Monitoramento CFTV - Armazem Paraiba
 Exec=/opt/gpm-cftv-viewer/GPM_CFTV_Viewer
 Icon=video-display
 Terminal=false
@@ -398,18 +434,36 @@ Categories=System;Video;
 StartupNotify=true
 EOF
 
+echo "  Atalho no menu criado!"
+
+# ==========================================
+# CONCLUSAO
+# ==========================================
 echo ""
 echo "========================================="
-echo "  INSTALACAO CONCLUIDA!"
+echo "  INSTALACAO CONCLUIDA COM SUCESSO!"
 echo "========================================="
 echo ""
-echo "O GPM CFTV Viewer esta instalado!"
+echo "O GPM CFTV Viewer esta pronto para usar!"
 echo ""
-echo "Para abrir:"
-echo "  - Duplo clique no icone do Desktop"
+echo "COMO ABRIR:"
+echo "  - Duplo clique no icone da Area de Trabalho"
 echo "  - Ou procure no menu: GPM CFTV Viewer"
 echo ""
+echo "ATALHOS:"
+echo "  F11         - Tela cheia"
+echo "  Duplo clique - Ampliar camera"
+echo "  ESC         - Voltar ao normal"
+echo ""
 echo "========================================="
+echo ""
+
+# Perguntar se quer abrir agora
+read -p "Deseja abrir o Viewer agora? (s/N): " resposta
+if [ "$resposta" = "s" ] || [ "$resposta" = "S" ]; then
+    echo "Abrindo..."
+    /opt/gpm-cftv-viewer/GPM_CFTV_Viewer &
+fi
 '''
         
         script_path = self.build_dir / "instalar.sh"
@@ -417,12 +471,10 @@ echo "========================================="
             f.write(script)
         os.chmod(script_path, 0o755)
         
-        print("    Script instalador criado")
+        print("    Script instalador completo criado")
     
     def _create_instructions(self):
-        """
-        Cria arquivo de instrucoes.
-        """
+        """Cria arquivo de instrucoes."""
         data_atual = datetime.now().strftime('%d/%m/%Y %H:%M')
         
         instrucoes = f"""========================================
@@ -433,21 +485,15 @@ GERADO EM: {data_atual}
 CAMERAS CONFIGURADAS: {len(self.cameras)}
 
 ----------------------------------------
-PARA INSTALAR NO COMPUTADOR DO USUARIO
+PARA INSTALAR (FAZ TUDO SOZINHO)
 ----------------------------------------
 
-[PASSO 1] Gerar o executavel (1 vez)
-  chmod +x build_appimage.sh
-  ./build_appimage.sh
-
-[PASSO 2] Instalar no sistema (1 vez)
-  chmod +x instalar.sh
-  ./instalar.sh
-  (Digite a senha do computador quando pedir)
-
-[PASSO 3] Usar
-  Duplo clique no icone do Desktop
-  OU procure no menu: GPM CFTV Viewer
+1. Abra o terminal na pasta extraida
+2. Execute:
+   chmod +x instalar.sh
+   ./instalar.sh
+3. Digite a senha do computador (1 vez)
+4. Pronto! Icone na Area de Trabalho!
 
 ----------------------------------------
 ATALHOS DO VIEWER
@@ -470,9 +516,7 @@ GPM Manutencao - Armazem Paraiba
         print("    Instrucoes criadas")
     
     def _export_zip(self) -> str:
-        """
-        Exporta tudo como ZIP.
-        """
+        """Exporta tudo como ZIP."""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         zip_name = f"GPM_CFTV_Viewer_Instalador_{timestamp}.zip"
         zip_path = self.output_dir / zip_name
