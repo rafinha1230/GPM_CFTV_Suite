@@ -152,12 +152,6 @@ class CameraFormDialog(QDialog):
         
         scroll_layout.addWidget(rtsp_group)
         
-        # Checkbox
-        self.chk_enabled = QCheckBox("✅ Câmera ativa")
-        self.chk_enabled.setChecked(True)
-        self.chk_enabled.setStyleSheet("font-size: 13px; font-weight: bold; padding: 3px;")
-        scroll_layout.addWidget(self.chk_enabled)
-        
         scroll_layout.addStretch()
         scroll.setWidget(scroll_widget)
         main_layout.addWidget(scroll, 1)
@@ -260,7 +254,6 @@ class CameraFormDialog(QDialog):
         self.txt_username.setText(camera.username)
         self.txt_password.setText(camera.password)
         self.txt_rtsp_path.setText(camera.rtsp_path)
-        self.chk_enabled.setChecked(camera.enabled)
     
     def get_camera_data(self) -> Camera:
         """Obtém dados do formulário como Camera."""
@@ -269,8 +262,7 @@ class CameraFormDialog(QDialog):
             port=self.spin_port.value(),
             username=self.txt_username.text().strip(),
             password=self.txt_password.text(),
-            rtsp_path=self.txt_rtsp_path.text().strip(),
-            enabled=self.chk_enabled.isChecked()
+            rtsp_path=self.txt_rtsp_path.text().strip()
         )
     
     def on_test_connection(self):
