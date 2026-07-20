@@ -1,26 +1,49 @@
 """
-GPM CFTV Studio - Formulário de Câmera
+GPM CFTV Studio - Formulário de Câmera Simplificado
 Autor: Rafael - GPM Manutenção
 Empresa: Armazém Paraíba
 """
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLineEdit, QSpinBox, QComboBox, QCheckBox,
+    QLineEdit, QSpinBox, QComboBox,
     QPushButton, QLabel, QGroupBox, QMessageBox,
-    QScrollArea, QWidget
+    QScrollArea, QWidget, QProgressDialog
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QThread, Signal
 
 from studio.models.camera import Camera, RTSP_PROFILES
+from studio.core.rtsp_tester import RTSPTester
+
+
+class AutoDetectWorker(QThread):
+    """Thread para auto-detecção sem travar a interface."""
+    finished = Signal(dict)  # resultado
+    progress = Signal(str)   # mensagem de progresso
+    error = Signal(str)      # mensagem de erro
+    
+    def __init__(self, ip, username, password):
+        super().__init__()
+        self.ip = ip
+        self.username = username
+        self.password = password
+    
+    def run(self):
+        self.progress.emit("Testando conexão com a câmera...")
+        result = RTSPTester.auto_detect(self.ip, self.username, self.password)
+        if result:
+            self.finished.emit(result)
+        else:
+            self.error.emit("Não foi possível detectar a câmera automaticamente.")
 
 
 class CameraFormDialog(QDialog):
-    """Diálogo para adicionar/editar câmera."""
+    """Diálogo simplificado para adicionar/editar câmera."""
     
     def __init__(self, camera: Camera = None, parent=None):
         super().__init__(parent)
         self.camera = camera
+        self.detected_config = None
         self.setup_ui()
         
         if camera:
@@ -30,14 +53,12 @@ class CameraFormDialog(QDialog):
             self.setWindowTitle("📷 Adicionar Nova Câmera")
     
     def setup_ui(self):
-        """Configura a interface do formulário."""
-        # Tamanho fixo adequado para notebooks
-        self.setMinimumSize(480, 580)
-        self.resize(520, 620)
-        self.setMaximumSize(700, 800)
+        """Configura a interface simplificada."""
+        self.setMinimumSize(450, 400)
+        self.resize(480, 450)
+        self.setMaximumSize(600, 600)
         self.setModal(True)
         
-        # Layout principal
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(8)
         main_layout.setContentsMargins(15, 15, 15, 15)
@@ -48,7 +69,7 @@ class CameraFormDialog(QDialog):
         title.setStyleSheet("font-size: 16px; font-weight: bold; padding: 5px; color: #cdd6f4;")
         main_layout.addWidget(title)
         
-        # Área com scroll (garante que tudo fique visível)
+        # Área com scroll
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
@@ -58,115 +79,140 @@ class CameraFormDialog(QDialog):
         scroll_layout = QVBoxLayout(scroll_widget)
         scroll_layout.setSpacing(8)
         
-        # ============ GRUPO REDE ============
-        network_group = QGroupBox("🌐 Configurações de Rede")
-        network_group.setStyleSheet(self._group_style("#89b4fa"))
-        network_layout = QFormLayout(network_group)
-        network_layout.setSpacing(8)
-        network_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        # ============ DADOS BÁSICOS ============
+        basic_group = QGroupBox("📋 Dados da Câmera")
+        basic_group.setStyleSheet(self._group_style("#89b4fa"))
+        basic_layout = QFormLayout(basic_group)
+        basic_layout.setSpacing(8)
+        basic_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
+        # IP
         self.txt_ip = QLineEdit()
         self.txt_ip.setPlaceholderText("Ex: 192.168.1.100")
         self.txt_ip.setMinimumHeight(32)
         lbl_ip = QLabel("Endereço IP:")
         lbl_ip.setFixedWidth(90)
-        network_layout.addRow(lbl_ip, self.txt_ip)
+        basic_layout.addRow(lbl_ip, self.txt_ip)
         
-        self.spin_port = QSpinBox()
-        self.spin_port.setRange(1, 65535)
-        self.spin_port.setValue(554)
-        self.spin_port.setMinimumHeight(32)
-        self.spin_port.setFixedWidth(100)
-        lbl_port = QLabel("Porta RTSP:")
-        lbl_port.setFixedWidth(90)
-        network_layout.addRow(lbl_port, self.spin_port)
-        
-        scroll_layout.addWidget(network_group)
-        
-        # ============ GRUPO AUTENTICAÇÃO ============
-        auth_group = QGroupBox("🔐 Autenticação")
-        auth_group.setStyleSheet(self._group_style("#f9e2af"))
-        auth_layout = QFormLayout(auth_group)
-        auth_layout.setSpacing(8)
-        auth_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
+        # Usuário
         self.txt_username = QLineEdit()
         self.txt_username.setPlaceholderText("Ex: admin")
         self.txt_username.setText("admin")
         self.txt_username.setMinimumHeight(32)
         lbl_user = QLabel("Usuário:")
         lbl_user.setFixedWidth(90)
-        auth_layout.addRow(lbl_user, self.txt_username)
+        basic_layout.addRow(lbl_user, self.txt_username)
         
+        # Senha
         self.txt_password = QLineEdit()
         self.txt_password.setEchoMode(QLineEdit.Password)
         self.txt_password.setPlaceholderText("Senha da câmera")
         self.txt_password.setMinimumHeight(32)
         lbl_pass = QLabel("Senha:")
         lbl_pass.setFixedWidth(90)
-        auth_layout.addRow(lbl_pass, self.txt_password)
+        basic_layout.addRow(lbl_pass, self.txt_password)
         
-        scroll_layout.addWidget(auth_group)
+        scroll_layout.addWidget(basic_group)
         
-        # ============ GRUPO RTSP ============
-        rtsp_group = QGroupBox("📡 Configurações RTSP")
-        rtsp_group.setStyleSheet(self._group_style("#a6e3a1"))
-        rtsp_layout = QVBoxLayout(rtsp_group)
-        rtsp_layout.setSpacing(6)
+        # ============ BOTÃO AUTO-DETECTAR ============
+        detect_layout = QHBoxLayout()
         
-        lbl_manufacturer = QLabel("Fabricante:")
-        lbl_manufacturer.setStyleSheet("font-weight: bold;")
-        rtsp_layout.addWidget(lbl_manufacturer)
+        self.btn_detect = QPushButton("🔍 Auto-Detectar Câmera")
+        self.btn_detect.setMinimumHeight(42)
+        self.btn_detect.clicked.connect(self.on_auto_detect)
+        self.btn_detect.setStyleSheet("""
+            QPushButton {
+                background-color: #f9e2af;
+                color: #1e1e2e;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #f5c2e7;
+            }
+        """)
+        detect_layout.addWidget(self.btn_detect)
         
+        scroll_layout.addLayout(detect_layout)
+        
+        # Status da detecção
+        self.lbl_detect_status = QLabel("")
+        self.lbl_detect_status.setAlignment(Qt.AlignCenter)
+        self.lbl_detect_status.setStyleSheet("color: #a6adc8; font-style: italic; padding: 5px;")
+        self.lbl_detect_status.setWordWrap(True)
+        scroll_layout.addWidget(self.lbl_detect_status)
+        
+        # ============ CONFIGURAÇÕES DETECTADAS ============
+        detected_group = QGroupBox("📡 Configurações Detectadas (Automático)")
+        detected_group.setStyleSheet(self._group_style("#a6e3a1"))
+        detected_layout = QFormLayout(detected_group)
+        detected_layout.setSpacing(8)
+        
+        self.lbl_manufacturer = QLabel("--")
+        self.lbl_manufacturer.setStyleSheet("font-weight: bold; color: #a6e3a1;")
+        detected_layout.addRow("Fabricante:", self.lbl_manufacturer)
+        
+        self.lbl_port = QLabel("--")
+        detected_layout.addRow("Porta:", self.lbl_port)
+        
+        self.lbl_profile = QLabel("--")
+        detected_layout.addRow("Perfil:", self.lbl_profile)
+        
+        self.lbl_path = QLabel("--")
+        self.lbl_path.setWordWrap(True)
+        detected_layout.addRow("Caminho RTSP:", self.lbl_path)
+        
+        # Campos ocultos (preenchidos automaticamente)
+        self.txt_rtsp_path = QLineEdit()
+        self.txt_rtsp_path.setVisible(False)
+        self.spin_port = QSpinBox()
+        self.spin_port.setRange(1, 65535)
+        self.spin_port.setValue(554)
+        self.spin_port.setVisible(False)
+        
+        scroll_layout.addWidget(detected_group)
+        
+        # ============ CONFIGURAÇÃO MANUAL (opcional) ============
+        manual_group = QGroupBox("⚙️ Configuração Manual (Opcional)")
+        manual_group.setStyleSheet(self._group_style("#6c7086"))
+        manual_layout = QFormLayout(manual_group)
+        manual_layout.setSpacing(8)
+        
+        # Porta manual
+        manual_port_layout = QHBoxLayout()
+        self.spin_port_manual = QSpinBox()
+        self.spin_port_manual.setRange(1, 65535)
+        self.spin_port_manual.setValue(554)
+        self.spin_port_manual.setMinimumHeight(32)
+        self.spin_port_manual.setFixedWidth(100)
+        manual_port_layout.addWidget(self.spin_port_manual)
+        manual_port_layout.addStretch()
+        manual_layout.addRow("Porta RTSP:", manual_port_layout)
+        
+        # Caminho manual
+        self.txt_rtsp_path_manual = QLineEdit()
+        self.txt_rtsp_path_manual.setPlaceholderText("Ex: /Streaming/Channels/101")
+        self.txt_rtsp_path_manual.setMinimumHeight(32)
+        manual_layout.addRow("Caminho RTSP:", self.txt_rtsp_path_manual)
+        
+        # Fabricante
         self.combo_manufacturer = QComboBox()
         self.combo_manufacturer.setMinimumHeight(32)
         self.combo_manufacturer.addItem("Selecione o fabricante...")
         self.combo_manufacturer.addItems(RTSP_PROFILES.keys())
-        self.combo_manufacturer.currentTextChanged.connect(self.on_manufacturer_changed)
-        rtsp_layout.addWidget(self.combo_manufacturer)
+        manual_layout.addRow("Fabricante:", self.combo_manufacturer)
         
-        lbl_profile = QLabel("Perfil RTSP:")
-        lbl_profile.setStyleSheet("font-weight: bold;")
-        rtsp_layout.addWidget(lbl_profile)
-        
-        self.combo_profile = QComboBox()
-        self.combo_profile.setMinimumHeight(32)
-        self.combo_profile.addItem("Selecione o perfil...")
-        self.combo_profile.currentIndexChanged.connect(self.on_profile_selected)
-        rtsp_layout.addWidget(self.combo_profile)
-        
-        lbl_path = QLabel("Caminho RTSP:")
-        lbl_path.setStyleSheet("font-weight: bold;")
-        rtsp_layout.addWidget(lbl_path)
-        
-        self.txt_rtsp_path = QLineEdit()
-        self.txt_rtsp_path.setMinimumHeight(32)
-        self.txt_rtsp_path.setPlaceholderText("Ou digite o caminho manualmente...")
-        rtsp_layout.addWidget(self.txt_rtsp_path)
-        
-        self.lbl_url = QLabel("Preencha os campos para gerar a URL...")
-        self.lbl_url.setStyleSheet("color: #89b4fa; font-style: italic; padding: 6px; background-color: #1e1e2e; border-radius: 4px;")
-        self.lbl_url.setWordWrap(True)
-        self.lbl_url.setMinimumHeight(36)
-        rtsp_layout.addWidget(self.lbl_url)
-        
-        scroll_layout.addWidget(rtsp_group)
+        scroll_layout.addWidget(manual_group)
         
         scroll_layout.addStretch()
         scroll.setWidget(scroll_widget)
         main_layout.addWidget(scroll, 1)
         
-        # Eventos de preview
-        self.txt_ip.textChanged.connect(self.update_url_preview)
-        self.txt_username.textChanged.connect(self.update_url_preview)
-        self.txt_rtsp_path.textChanged.connect(self.update_url_preview)
-        self.spin_port.valueChanged.connect(self.update_url_preview)
-        
-        # ============ BOTÕES (SEMPRE VISÍVEIS) ============
+        # ============ BOTÕES ============
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(8)
         
-        self.btn_test = QPushButton("🔍 Testar")
+        self.btn_test = QPushButton("🔍 Testar Conexão")
         self.btn_test.setMinimumHeight(38)
         self.btn_test.clicked.connect(self.on_test_connection)
         buttons_layout.addWidget(self.btn_test)
@@ -217,52 +263,104 @@ class CameraFormDialog(QDialog):
             }}
         """
     
-    def on_manufacturer_changed(self, manufacturer: str):
-        """Atualiza perfis quando fabricante muda."""
-        self.combo_profile.clear()
-        self.combo_profile.addItem("Selecione o perfil...")
-        
-        if manufacturer in RTSP_PROFILES:
-            profiles = RTSP_PROFILES[manufacturer]
-            for profile_name, path in profiles.items():
-                self.combo_profile.addItem(f"{profile_name} → {path}", path)
-    
-    def on_profile_selected(self, index: int):
-        """Preenche caminho RTSP quando perfil selecionado."""
-        if index > 0:
-            path = self.combo_profile.currentData()
-            if path:
-                self.txt_rtsp_path.setText(path)
-    
-    def update_url_preview(self):
-        """Atualiza preview da URL RTSP."""
+    def on_auto_detect(self):
+        """Auto-detecta configurações da câmera."""
         ip = self.txt_ip.text().strip()
-        port = self.spin_port.value()
         username = self.txt_username.text().strip()
-        path = self.txt_rtsp_path.text().strip()
+        password = self.txt_password.text()
         
-        if ip and path:
-            url = f"rtsp://{username}:****@{ip}:{port}{path}"
-            self.lbl_url.setText(f"🔗 {url}")
-        else:
-            self.lbl_url.setText("⚠️ Preencha IP e caminho RTSP...")
+        if not ip:
+            QMessageBox.warning(self, "Aviso", "Digite o endereço IP primeiro!")
+            return
+        
+        if not username:
+            QMessageBox.warning(self, "Aviso", "Digite o nome de usuário!")
+            return
+        
+        # Desabilitar botão durante detecção
+        self.btn_detect.setEnabled(False)
+        self.btn_detect.setText("⏳ Detectando...")
+        self.lbl_detect_status.setText("Procurando câmera...")
+        
+        # Criar worker thread
+        self.worker = AutoDetectWorker(ip, username, password)
+        self.worker.finished.connect(self.on_detect_success)
+        self.worker.error.connect(self.on_detect_error)
+        self.worker.progress.connect(self.lbl_detect_status.setText)
+        self.worker.start()
+    
+    def on_detect_success(self, result: dict):
+        """Callback de detecção bem-sucedida."""
+        self.btn_detect.setEnabled(True)
+        self.btn_detect.setText("🔍 Auto-Detectar Câmera")
+        
+        self.detected_config = result
+        
+        # Preencher campos
+        self.lbl_manufacturer.setText(f"✅ {result.get('manufacturer', 'Detectado')}")
+        self.lbl_port.setText(f"✅ {result.get('port', 554)}")
+        self.lbl_profile.setText(f"✅ {result.get('profile', 'main')}")
+        self.lbl_path.setText(f"✅ {result.get('rtsp_path', '')}")
+        
+        # Preencher campos ocultos
+        self.txt_rtsp_path.setText(result.get('rtsp_path', ''))
+        self.spin_port.setValue(result.get('port', 554))
+        
+        self.lbl_detect_status.setText("✅ Câmera detectada com sucesso!")
+        self.lbl_detect_status.setStyleSheet("color: #a6e3a1; font-weight: bold; padding: 5px;")
+    
+    def on_detect_error(self, error_msg: str):
+        """Callback de erro na detecção."""
+        self.btn_detect.setEnabled(True)
+        self.btn_detect.setText("🔍 Auto-Detectar Câmera")
+        
+        self.lbl_manufacturer.setText("❌ Não detectado")
+        self.lbl_port.setText("❌")
+        self.lbl_profile.setText("❌")
+        self.lbl_path.setText("❌")
+        
+        self.lbl_detect_status.setText(f"❌ {error_msg}\nUse a configuração manual abaixo.")
+        self.lbl_detect_status.setStyleSheet("color: #f38ba8; font-weight: bold; padding: 5px;")
+        
+        QMessageBox.warning(
+            self,
+            "Câmera não detectada",
+            f"{error_msg}\n\n"
+            f"Você pode configurar manualmente\n"
+            f"os parâmetros na seção 'Configuração Manual'."
+        )
     
     def load_camera_data(self, camera: Camera):
         """Carrega dados da câmera no formulário."""
         self.txt_ip.setText(camera.ip)
-        self.spin_port.setValue(camera.port)
         self.txt_username.setText(camera.username)
         self.txt_password.setText(camera.password)
         self.txt_rtsp_path.setText(camera.rtsp_path)
+        self.spin_port.setValue(camera.port)
+        self.spin_port_manual.setValue(camera.port)
+        self.txt_rtsp_path_manual.setText(camera.rtsp_path)
+        
+        if camera.rtsp_path:
+            self.lbl_path.setText(f"✅ {camera.rtsp_path}")
+            self.lbl_port.setText(f"✅ {camera.port}")
     
     def get_camera_data(self) -> Camera:
         """Obtém dados do formulário como Camera."""
+        # Se detectou automaticamente, usa os valores detectados
+        if self.detected_config:
+            port = self.detected_config.get('port', 554)
+            rtsp_path = self.detected_config.get('rtsp_path', '')
+        else:
+            # Usa valores manuais
+            port = self.spin_port_manual.value()
+            rtsp_path = self.txt_rtsp_path_manual.text().strip()
+        
         return Camera(
             ip=self.txt_ip.text().strip(),
-            port=self.spin_port.value(),
+            port=port,
             username=self.txt_username.text().strip(),
             password=self.txt_password.text(),
-            rtsp_path=self.txt_rtsp_path.text().strip()
+            rtsp_path=rtsp_path
         )
     
     def on_test_connection(self):
@@ -274,22 +372,15 @@ class CameraFormDialog(QDialog):
             QMessageBox.warning(self, "Validação", msg)
             return
         
-        QMessageBox.information(
-            self,
-            "Teste de Conexão",
-            f"Funcionalidade em desenvolvimento!\n\n"
-            f"URL: {camera.get_rtsp_url()}"
-        )
+        status, msg = RTSPTester.test_camera(camera)
+        
+        if status:
+            QMessageBox.information(self, "✅ Conexão OK", f"Câmera conectada!\n\n{msg}")
+        else:
+            QMessageBox.warning(self, "❌ Falha", f"Erro na conexão:\n{msg}")
     
     def on_save(self):
         """Salva a câmera."""
-        camera = self.get_camera_data()
-        valid, msg = camera.validate()
-        
-        if not valid:
-            QMessageBox.warning(self, "Erro de Validação", msg)
-            return
-        
         self.accept()
     
     def accept(self):
