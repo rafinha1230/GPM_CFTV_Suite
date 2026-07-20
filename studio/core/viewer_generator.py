@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import List
 
 from studio.models.camera import Camera
+from studio.core.script_writer import ScriptWriter
 
 
 class ViewerGenerator:
@@ -208,10 +209,8 @@ class ViewerGenerator:
         launcher_linux += 'python3 viewer/main.py\n\n'
         launcher_linux += 'echo "Viewer encerrado."\n'
         
-        launcher_path = self.build_dir / "start_viewer.sh"
-        with open(launcher_path, 'w') as f:
-            f.write(launcher_linux)
-        os.chmod(launcher_path, 0o755)
+        launcher_path = str(self.build_dir / "start_viewer.sh")
+        ScriptWriter.write_script(launcher_path, launcher_linux)
         
         # Script Windows
         bat_launcher = '@echo off\n'

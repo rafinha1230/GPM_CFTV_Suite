@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List
 from studio.models.camera import Camera
+from studio.core.script_writer import ScriptWriter
 
 
 class AppImageBuilder:
@@ -288,12 +289,9 @@ echo ""
 echo "Agora execute: ./instalar.sh"
 '''
         
-        script_path = self.build_dir / "build_appimage.sh"
-        with open(script_path, 'w', encoding='utf-8') as f:
-            f.write(script)
-        os.chmod(script_path, 0o755)
-        
-        print("    Script de build criado")
+        script_path = str(self.build_dir / "build_appimage.sh")
+        ScriptWriter.write_script(script_path, script)
+        print("    Script de build criado (formato Unix)")
     
     def _create_installer_script(self):
         """
@@ -339,9 +337,6 @@ if [ ! -f "dist/GPM_CFTV_Viewer" ]; then
     # Instalar PyInstaller
     echo "  Instalando PyInstaller..."
     pip3 install --quiet pyinstaller PySide6 2>/dev/null
-    
-    # Corrigir formato do script se necessario
-    sed -i 's/\\r$//' build_appimage.sh 2>/dev/null
     
     # Gerar executavel
     echo "  Compilando... (pode demorar 2-3 minutos)"
@@ -466,12 +461,9 @@ if [ "$resposta" = "s" ] || [ "$resposta" = "S" ]; then
 fi
 '''
         
-        script_path = self.build_dir / "instalar.sh"
-        with open(script_path, 'w', encoding='utf-8') as f:
-            f.write(script)
-        os.chmod(script_path, 0o755)
-        
-        print("    Script instalador completo criado")
+        script_path = str(self.build_dir / "instalar.sh")
+        ScriptWriter.write_script(script_path, script)
+        print("    Script instalador criado (formato Unix)")
     
     def _create_instructions(self):
         """Cria arquivo de instrucoes."""
