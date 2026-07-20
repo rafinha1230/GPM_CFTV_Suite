@@ -18,9 +18,9 @@ from studio.core.rtsp_tester import RTSPTester
 
 class AutoDetectWorker(QThread):
     """Thread para auto-detecção sem travar a interface."""
-    finished = Signal(dict)  # resultado
-    progress = Signal(str)   # mensagem de progresso
-    error = Signal(str)      # mensagem de erro
+    finished = Signal(dict)
+    progress = Signal(str)
+    error = Signal(str)
     
     def __init__(self, ip, username, password):
         super().__init__()
@@ -200,6 +200,7 @@ class CameraFormDialog(QDialog):
         self.combo_manufacturer.setMinimumHeight(32)
         self.combo_manufacturer.addItem("Selecione o fabricante...")
         self.combo_manufacturer.addItems(RTSP_PROFILES.keys())
+        self.combo_manufacturer.currentTextChanged.connect(self.on_manufacturer_changed)
         manual_layout.addRow("Fabricante:", self.combo_manufacturer)
         
         scroll_layout.addWidget(manual_group)
@@ -262,6 +263,15 @@ class CameraFormDialog(QDialog):
                 padding: 0 6px;
             }}
         """
+    
+    def on_manufacturer_changed(self, manufacturer: str):
+        """Preenche caminho RTSP ao selecionar fabricante."""
+        if manufacturer in RTSP_PROFILES:
+            profiles = RTSP_PROFILES[manufacturer]
+            first_profile = list(profiles.keys())[0]
+            first_path = profiles[first_profile]
+            self.txt_rtsp_path_manual.setText(first_path)
+            self.txt_rtsp_path_manual.setStyleSheet("background-color: #313244; color: #a6e3a1;")
     
     def on_auto_detect(self):
         """Auto-detecta configurações da câmera."""
