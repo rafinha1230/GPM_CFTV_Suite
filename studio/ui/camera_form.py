@@ -398,6 +398,12 @@ class CameraFormDialog(QDialog):
         camera = self.get_camera_data()
         valid, msg = camera.validate()
         
+        # Se o erro for caminho RTSP vazio, tenta pegar do campo manual
+        if not valid and "Caminho RTSP" in msg:
+            if self.txt_rtsp_path_manual.text().strip():
+                camera.rtsp_path = self.txt_rtsp_path_manual.text().strip()
+                valid, msg = camera.validate()
+        
         if not valid:
             QMessageBox.warning(self, "Erro de Validação", msg)
             return
